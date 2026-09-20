@@ -33,7 +33,7 @@ def get_course():
 def say_Welcome():
     name = request.args.get('name', 'Student')
     return jsonify({
-"message": f"Welcome, {name}! from {program} {year_level} "
+"message": f"Welcome, {name}! from, {program}, {year_level} "
 })
 
 if __name__ == '__main__':
