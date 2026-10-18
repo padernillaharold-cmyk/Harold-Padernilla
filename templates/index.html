@@ -41,6 +41,11 @@
         <button onclick="sayHello()">Say Hello</button>
         <p id="greeting"></p>
 
+        <hr>
+        <h2>Course API</h2>
+        <button onclick="loadCourse()">Load Course Information</button>
+        <div id="course-result"></div>
+
         <script>
             function loadStudent() {
                 fetch('/student')
@@ -69,6 +74,22 @@
                     .catch(error => {
                         document.getElementById('greeting').innerText =
                             'Unable to retrieve greeting.';
+                    });
+            }
+
+            function loadCourse() {
+                fetch('/course')
+                    .then(response => response.json())
+                    .then(data => {
+                        document.getElementById('course-result').innerHTML =
+                            '<p><b>Course Code:</b> ' + data.course_code + '</p>' +
+                            '<p><b>Course Name:</b> ' + data.course_name + '</p>' +
+                            '<p><b>Program:</b> ' + data.program + '</p>' +
+                            '<p><b>Year Level:</b> ' + data.year_level + '</p>';
+                    })
+                    .catch(error => {
+                        document.getElementById('course-result').innerHTML =
+                            '<p>Unable to retrieve course information.</p>';
                     });
             }
         </script>
