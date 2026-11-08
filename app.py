@@ -1,4 +1,5 @@
 import sqlite3
+from urllib.parse import urlparse
 
 from flask import Flask, jsonify, render_template, request
 import requests
@@ -17,9 +18,12 @@ def get_classmate_students():
     api_url = request.args.get('url', '').strip()
     if not api_url:
         return jsonify({"error": "Classmate API URL is required"}), 400
+    parsed_url = urlparse(api_url)
+    if parsed_url.scheme not in ('http', 'https') or not parsed_url.netloc:
+        return jsonify({"error": "Enter a complete http:// or https:// API URL"}), 400
 
     try:
-        response = requests.get(api_url, timeout=15)
+        response = requests.get(api_url, timeout=15, allow_redirects=True)
         response.raise_for_status()
         data = response.json()
     except requests.RequestException as error:

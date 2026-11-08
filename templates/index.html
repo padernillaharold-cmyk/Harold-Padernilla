@@ -121,11 +121,23 @@
                     return;
                 }
 
+                status.innerText = 'Loading...';
                 fetch('/api/classmate/students?url=' + encodeURIComponent(apiUrl))
-                    .then(response => response.json().then(data => ({ response, data })))
+                    .then(response => response.text().then(text => {
+                        let data;
+                        try {
+                            data = JSON.parse(text);
+                        } catch (error) {
+                            throw new Error('The server returned invalid JSON (HTTP ' + response.status + ').');
+                        }
+                        return { response, data };
+                    }))
                     .then(({ response, data }) => {
                         if (!response.ok) {
-                            throw new Error(data.error || 'Unable to retrieve records.');
+                            throw new Error(
+                                data.error +
+                                (data.details ? ': ' + data.details : '')
+                            );
                         }
 
                         classmateStudents = data;
@@ -223,7 +235,7 @@
             }
 
             function renderLocalStudents(students) {
-                let rows = '<tr><th>ID</th><th>Student ID</th><th>Name</th><th>Program</th><th>Year</th><th>Section</th></tr>';
+                let rows = '<tr><th>ID</th><th>Student ID</th><th>Name</th><th>Program</th><th>Year</th><th>Section</th><th>Actions</th></tr>';
                 students.forEach(student => {
                     rows += '<tr data-id="' + student.id + '" style="cursor:pointer">' +
                                 '<td>' + student.id + '</td>' +
@@ -232,23 +244,59 @@
                                 '<td>' + student.program + '</td>' +
                                 '<td>' + student.year + '</td>' +
                                 '<td>' + student.section + '</td>' +
+                                '<td>' +
+                                '<button type="button" data-action="edit" data-id="' + student.id + '">Edit</button>' +
+                                '<button type="button" data-action="delete" data-id="' + student.id + '">Delete</button>' +
+                                '</td>' +
                                 '</tr>';
                 });
                 document.getElementById('studentTable').innerHTML = rows;
                 document.querySelectorAll('#studentTable tr[data-id]').forEach(row => {
-                    row.addEventListener('click', () => {
+                    row.addEventListener('click', event => {
+                        if (event.target.closest('[data-action]')) return;
                         const id = Number(row.dataset.id);
                         requestJson('/api/students/' + id).then(student => {
-                            document.getElementById('recordId').value = student.id;
-                            document.getElementById('studentId').value = student.student_id;
-                            document.getElementById('studentName').value = student.name;
-                            document.getElementById('studentProgram').value = student.program;
-                            document.getElementById('studentYear').value = student.year;
-                            document.getElementById('studentSection').value = student.section;
+                            fillStudentForm(student);
                             renderStudentDetails('localStudentDetails', student, 'Local');
                             });
                         });
                 });
+                document.querySelectorAll('#studentTable [data-action]').forEach(button => {
+                    button.addEventListener('click', event => {
+                        event.stopPropagation();
+                        const id = Number(button.dataset.id);
+                        if (button.dataset.action === 'edit') {
+                            requestJson('/api/students/' + id).then(student => {
+                                fillStudentForm(student);
+                                document.getElementById('studentName').focus();
+                                renderStudentDetails('localStudentDetails', student, 'Local');
+                                setCrudStatus('Record loaded. Make changes, then click Edit.');
+                            });
+                        } else {
+                            deleteRecordFromTable(id);
+                        }
+                    });
+                });
+            }
+
+            function fillStudentForm(student) {
+                document.getElementById('recordId').value = student.id;
+                document.getElementById('studentId').value = student.student_id;
+                document.getElementById('studentName').value = student.name;
+                document.getElementById('studentProgram').value = student.program;
+                document.getElementById('studentYear').value = student.year;
+                document.getElementById('studentSection').value = student.section;
+            }
+
+            function deleteRecordFromTable(id) {
+                if (!window.confirm('Delete this student record?')) return;
+                requestJson('/api/students/' + id, { method: 'DELETE' })
+                    .then(result => {
+                        setCrudStatus(result.message);
+                        clearStudentForm();
+                        readStudents();
+                    })
+                    .catch(error => setCrudStatus(error.message, true));
             }
 
             document.addEventListener('input', event => {
