@@ -83,10 +83,92 @@
         <button onclick="deleteStudent()">Delete</button>
         <button onclick="clearStudentForm()">Clear</button>
         <p id="crudStatus"></p>
-        <button onclick="readStudents()">Read Students</button>
+        <h3>My Records</h3>
+        <p><strong>Source:</strong> This application's local database</p>
+        <button onclick="readStudents()">Load My Records</button>
+        <input type="search" id="localStudentSearch" placeholder="Search ID, name, program, year, or section">
         <table id="studentTable"></table>
+        <div id="localStudentDetails"></div>
+
+        <hr>
+        <h2>Classmate's Records</h2>
+        <p><strong>Source:</strong> Partner's public API URL</p>
+        <input
+            type="url"
+            id="classmateApiUrl"
+            placeholder="https://classmate-app.onrender.com/api/students"
+            style="width: 100%; box-sizing: border-box;"
+        >
+        <button onclick="loadClassmateStudents()">Load Classmate Records</button>
+        <div id="classmateStatus"></div>
+        <table id="classmateTable"></table>
+        <div id="classmateStudentDetails"></div>
 
         <script>
+            window.addEventListener('DOMContentLoaded', readStudents);
+            let localStudents = [];
+            let classmateStudents = [];
+
+            function loadClassmateStudents() {
+                const apiUrl = document.getElementById('classmateApiUrl').value.trim();
+                const status = document.getElementById('classmateStatus');
+                const table = document.getElementById('classmateTable');
+                status.innerText = '';
+                table.innerHTML = '';
+
+                if (!apiUrl) {
+                    status.innerText = 'Enter your classmate API URL.';
+                    return;
+                }
+
+                fetch('/api/classmate/students?url=' + encodeURIComponent(apiUrl))
+                    .then(response => response.json().then(data => ({ response, data })))
+                    .then(({ response, data }) => {
+                        if (!response.ok) {
+                            throw new Error(data.error || 'Unable to retrieve records.');
+                        }
+
+                        classmateStudents = data;
+                        const header = '<tr><th>Student ID</th><th>Name</th><th>Program</th><th>Year</th><th>Section</th></tr>';
+                        const rows = data.map(student =>
+                            '<tr data-index="' + data.indexOf(student) + '" style="cursor:pointer"><td>' + escapeHtml(student.student_id) + '</td>' +
+                            '<td>' + escapeHtml(student.name) + '</td>' +
+                            '<td>' + escapeHtml(student.program) + '</td>' +
+                            '<td>' + escapeHtml(student.year) + '</td>' +
+                            '<td>' + escapeHtml(student.section) + '</td></tr>'
+                        ).join('');
+                        table.innerHTML = header + rows;
+                        document.querySelectorAll('#classmateTable tr[data-index]').forEach(row => {
+                            row.addEventListener('click', () => showClassmateDetails(classmateStudents[Number(row.dataset.index)]));
+                        });
+                        status.innerText = 'Loaded ' + data.length + ' classmate record(s).';
+                    })
+                    .catch(error => {
+                        status.innerText = error.message || 'Unable to retrieve classmate records.';
+                    });
+            }
+
+            function escapeHtml(value) {
+                const element = document.createElement('div');
+                element.textContent = value == null ? '' : String(value);
+                return element.innerHTML;
+            }
+
+            function renderStudentDetails(containerId, student, source) {
+                document.getElementById(containerId).innerHTML =
+                    '<h3>' + escapeHtml(source) + ' Record Details</h3>' +
+                    '<p><strong>Record ID:</strong> ' + escapeHtml(student.id) + '</p>' +
+                    '<p><strong>Student ID:</strong> ' + escapeHtml(student.student_id) + '</p>' +
+                    '<p><strong>Name:</strong> ' + escapeHtml(student.name) + '</p>' +
+                    '<p><strong>Program:</strong> ' + escapeHtml(student.program) + '</p>' +
+                    '<p><strong>Year:</strong> ' + escapeHtml(student.year) + '</p>' +
+                    '<p><strong>Section:</strong> ' + escapeHtml(student.section) + '</p>';
+            }
+
+            function showClassmateDetails(student) {
+                renderStudentDetails('classmateStudentDetails', student, 'Remote Classmate');
+            }
+
             function requestJson(url, options = {}) {
                 return fetch(url, options)
                     .then(response => response.json().then(data => ({ response, data })))
@@ -133,9 +215,17 @@
             function readStudents() {
                 requestJson('/api/students')
                     .then(students => {
-                        let rows = '<tr><th>ID</th><th>Student ID</th><th>Name</th><th>Program</th><th>Year</th><th>Section</th></tr>';
-                        students.forEach(student => {
-                            rows += '<tr data-id="' + student.id + '">' +
+                        localStudents = students;
+                        renderLocalStudents(students);
+                        setCrudStatus('Loaded ' + students.length + ' student(s).');
+                    })
+                    .catch(error => setCrudStatus(error.message, true));
+            }
+
+            function renderLocalStudents(students) {
+                let rows = '<tr><th>ID</th><th>Student ID</th><th>Name</th><th>Program</th><th>Year</th><th>Section</th></tr>';
+                students.forEach(student => {
+                    rows += '<tr data-id="' + student.id + '" style="cursor:pointer">' +
                                 '<td>' + student.id + '</td>' +
                                 '<td>' + student.student_id + '</td>' +
                                 '<td>' + student.name + '</td>' +
@@ -143,25 +233,34 @@
                                 '<td>' + student.year + '</td>' +
                                 '<td>' + student.section + '</td>' +
                                 '</tr>';
-                        });
-                        document.getElementById('studentTable').innerHTML = rows;
-                        document.querySelectorAll('#studentTable tr[data-id]').forEach(row => {
-                            row.addEventListener('click', () => {
-                                const id = row.dataset.id;
-                                requestJson('/api/students/' + id).then(student => {
-                                    document.getElementById('recordId').value = student.id;
-                                    document.getElementById('studentId').value = student.student_id;
-                                    document.getElementById('studentName').value = student.name;
-                                    document.getElementById('studentProgram').value = student.program;
-                                    document.getElementById('studentYear').value = student.year;
-                                    document.getElementById('studentSection').value = student.section;
-                                });
+                });
+                document.getElementById('studentTable').innerHTML = rows;
+                document.querySelectorAll('#studentTable tr[data-id]').forEach(row => {
+                    row.addEventListener('click', () => {
+                        const id = Number(row.dataset.id);
+                        requestJson('/api/students/' + id).then(student => {
+                            document.getElementById('recordId').value = student.id;
+                            document.getElementById('studentId').value = student.student_id;
+                            document.getElementById('studentName').value = student.name;
+                            document.getElementById('studentProgram').value = student.program;
+                            document.getElementById('studentYear').value = student.year;
+                            document.getElementById('studentSection').value = student.section;
+                            renderStudentDetails('localStudentDetails', student, 'Local');
                             });
                         });
-                        setCrudStatus('Loaded ' + students.length + ' student(s).');
-                    })
-                    .catch(error => setCrudStatus(error.message, true));
+                });
             }
+
+            document.addEventListener('input', event => {
+                if (event.target.id !== 'localStudentSearch') return;
+                const query = event.target.value.toLowerCase();
+                const filtered = localStudents.filter(student =>
+                    [student.id, student.student_id, student.name, student.program,
+                        student.year, student.section].some(value =>
+                        String(value).toLowerCase().includes(query))
+                );
+                renderLocalStudents(filtered);
+            });
 
             function createStudent() {
                 const data = getStudentData();

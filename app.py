@@ -1,6 +1,7 @@
 import sqlite3
 
 from flask import Flask, jsonify, render_template, request
+import requests
 
 app = Flask(__name__)
 
@@ -9,6 +10,26 @@ def get_db_connection():
     conn = sqlite3.connect('students.db')
     conn.row_factory = sqlite3.Row
     return conn
+
+
+@app.route('/api/classmate/students')
+def get_classmate_students():
+    api_url = request.args.get('url', '').strip()
+    if not api_url:
+        return jsonify({"error": "Classmate API URL is required"}), 400
+
+    try:
+        response = requests.get(api_url, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+    except requests.RequestException as error:
+        return jsonify({"error": "Unable to retrieve classmate records", "details": str(error)}), 502
+    except ValueError:
+        return jsonify({"error": "Classmate API did not return valid JSON"}), 502
+
+    if not isinstance(data, list):
+        return jsonify({"error": "Classmate API must return a JSON list"}), 502
+    return jsonify(data)
 
 
 @app.route('/api/students', methods=['GET'])
