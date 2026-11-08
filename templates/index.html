@@ -23,6 +23,28 @@
                 padding: 8px;
             }
 
+            #crudForm {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 10px;
+            }
+
+            #studentTable {
+                width: 100%;
+                border-collapse: collapse;
+            }
+
+            #studentTable th,
+            #studentTable td {
+                border: 1px solid #cccccc;
+                padding: 8px;
+                text-align: left;
+            }
+
+            #studentTable tr[data-id] {
+                cursor: pointer;
+            }
+
             #result {
                 margin-top: 20px;
                 padding: 10px;
@@ -47,11 +69,151 @@
         <div id="course-result"></div>
 
         <hr>
-        <h2>Students from Database</h2>
-        <button onclick="loadStudents()">Load Students</button>
-        <div id="studentList"></div>
+        <h2>Student CRUD</h2>
+        <div id="crudForm">
+            <input type="number" id="recordId" placeholder="Record ID" disabled>
+            <input type="text" id="studentId" placeholder="Student ID">
+            <input type="text" id="studentName" placeholder="Name">
+            <input type="text" id="studentProgram" placeholder="Program">
+            <input type="number" id="studentYear" placeholder="Year Level" min="1">
+            <input type="text" id="studentSection" placeholder="Section">
+        </div>
+        <button onclick="createStudent()">Add</button>
+        <button onclick="updateStudent()">Edit</button>
+        <button onclick="deleteStudent()">Delete</button>
+        <button onclick="clearStudentForm()">Clear</button>
+        <p id="crudStatus"></p>
+        <button onclick="readStudents()">Read Students</button>
+        <table id="studentTable"></table>
 
         <script>
+            function requestJson(url, options = {}) {
+                return fetch(url, options)
+                    .then(response => response.json().then(data => ({ response, data })))
+                    .then(({ response, data }) => {
+                        if (!response.ok) {
+                            throw new Error(data.error || data.message || 'Request failed');
+                        }
+                        return data;
+                    });
+            }
+
+            function getStudentData() {
+                return {
+                    student_id: document.getElementById('studentId').value.trim(),
+                    name: document.getElementById('studentName').value.trim(),
+                    program: document.getElementById('studentProgram').value.trim(),
+                    year: Number(document.getElementById('studentYear').value),
+                    section: document.getElementById('studentSection').value.trim()
+                };
+            }
+
+            function setCrudStatus(message, isError = false) {
+                const status = document.getElementById('crudStatus');
+                status.innerText = message;
+                status.style.color = isError ? 'red' : 'green';
+            }
+
+            function clearStudentForm() {
+                ['recordId', 'studentId', 'studentName', 'studentProgram',
+                    'studentYear', 'studentSection'].forEach(id => {
+                    document.getElementById(id).value = '';
+                });
+            }
+
+            function validateStudentData(data) {
+                if (!data.student_id || !data.name || !data.program ||
+                    !data.year || !data.section) {
+                    setCrudStatus('Complete all student fields.', true);
+                    return false;
+                }
+                return true;
+            }
+
+            function readStudents() {
+                requestJson('/api/students')
+                    .then(students => {
+                        let rows = '<tr><th>ID</th><th>Student ID</th><th>Name</th><th>Program</th><th>Year</th><th>Section</th></tr>';
+                        students.forEach(student => {
+                            rows += '<tr data-id="' + student.id + '">' +
+                                '<td>' + student.id + '</td>' +
+                                '<td>' + student.student_id + '</td>' +
+                                '<td>' + student.name + '</td>' +
+                                '<td>' + student.program + '</td>' +
+                                '<td>' + student.year + '</td>' +
+                                '<td>' + student.section + '</td>' +
+                                '</tr>';
+                        });
+                        document.getElementById('studentTable').innerHTML = rows;
+                        document.querySelectorAll('#studentTable tr[data-id]').forEach(row => {
+                            row.addEventListener('click', () => {
+                                const id = row.dataset.id;
+                                requestJson('/api/students/' + id).then(student => {
+                                    document.getElementById('recordId').value = student.id;
+                                    document.getElementById('studentId').value = student.student_id;
+                                    document.getElementById('studentName').value = student.name;
+                                    document.getElementById('studentProgram').value = student.program;
+                                    document.getElementById('studentYear').value = student.year;
+                                    document.getElementById('studentSection').value = student.section;
+                                });
+                            });
+                        });
+                        setCrudStatus('Loaded ' + students.length + ' student(s).');
+                    })
+                    .catch(error => setCrudStatus(error.message, true));
+            }
+
+            function createStudent() {
+                const data = getStudentData();
+                if (!validateStudentData(data)) return;
+                requestJson('/api/students', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                })
+                    .then(result => {
+                        setCrudStatus(result.message + ' (ID: ' + result.id + ')');
+                        clearStudentForm();
+                        readStudents();
+                    })
+                    .catch(error => setCrudStatus(error.message, true));
+            }
+
+            function updateStudent() {
+                const id = document.getElementById('recordId').value;
+                const data = getStudentData();
+                if (!id) {
+                    setCrudStatus('Select a student row, then edit it.', true);
+                    return;
+                }
+                if (!validateStudentData(data)) return;
+                requestJson('/api/students/' + id, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                })
+                    .then(result => {
+                        setCrudStatus(result.message);
+                        readStudents();
+                    })
+                    .catch(error => setCrudStatus(error.message, true));
+            }
+
+            function deleteStudent() {
+                const id = document.getElementById('recordId').value;
+                if (!id) {
+                    setCrudStatus('Select a student row, then delete it.', true);
+                    return;
+                }
+                requestJson('/api/students/' + id, { method: 'DELETE' })
+                    .then(result => {
+                        setCrudStatus(result.message);
+                        clearStudentForm();
+                        readStudents();
+                    })
+                    .catch(error => setCrudStatus(error.message, true));
+            }
+
             function loadStudent() {
                 fetch('/student')
                     .then(response => response.json())
@@ -95,29 +257,6 @@
                     .catch(error => {
                         document.getElementById('course-result').innerHTML =
                             '<p>Unable to retrieve course information.</p>';
-                    });
-            }
-
-            function loadStudents() {
-                fetch('/students')
-                    .then(response => response.json())
-                    .then(data => {
-                        let output = '';
-                        data.forEach(student => {
-                            output +=
-                                '<p>' +
-                                '<b>' + student.student_id + '</b> - ' +
-                                student.name + ' | ' +
-                                student.program + ' | Year ' +
-                                student.year + ' | Section ' +
-                                student.section +
-                                '</p>';
-                        });
-                        document.getElementById('studentList').innerHTML = output;
-                    })
-                    .catch(error => {
-                        document.getElementById('studentList').innerHTML =
-                            '<p>Unable to retrieve student records.</p>';
                     });
             }
         </script>
