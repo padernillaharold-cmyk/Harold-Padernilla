@@ -1,6 +1,6 @@
 import requests
 
-url = "https://paclibarjosilp-2.onrender.com/student"
+url = "https://paclibarjosilp-2.onrender.com/api/students"
 
 response = requests.get(url, timeout=30)
 
