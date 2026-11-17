@@ -233,7 +233,7 @@
                     body: JSON.stringify(student)
                 })
                     .then(result => {
-                        button.innerText = 'Saved locally';
+                        saveButton.innerText = 'Saved locally';
                         document.getElementById('partnerStatus').innerText = result.message;
                         readStudents();
                     })
