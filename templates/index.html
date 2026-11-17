@@ -198,14 +198,34 @@
                         if (button.dataset.action === 'view') {
                             renderStudentDetails('partnerStudentDetails', student, 'Partner');
                         } else {
-                            savePartnerStudent(student, button);
+                            previewPartnerStudent(student, button);
                         }
                     });
                 });
             }
 
-            function savePartnerStudent(student, button) {
-                button.disabled = true;
+            function previewPartnerStudent(student, saveButton) {
+                document.getElementById('partnerStudentDetails').innerHTML =
+                    '<h3>Review Partner Record</h3>' +
+                    '<p><strong>Student ID:</strong> ' + escapeHtml(student.student_id) + '</p>' +
+                    '<p><strong>Name:</strong> ' + escapeHtml(student.name) + '</p>' +
+                    '<p><strong>Program:</strong> ' + escapeHtml(student.program) + '</p>' +
+                    '<p><strong>Year:</strong> ' + escapeHtml(student.year) + '</p>' +
+                    '<p><strong>Section:</strong> ' + escapeHtml(student.section) + '</p>' +
+                    '<p><strong>Source:</strong> ' + escapeHtml(student.source || 'Partner API') + '</p>' +
+                    '<button type="button" id="confirmPartnerSave">Confirm Save to My Database</button>' +
+                    '<button type="button" id="cancelPartnerSave">Cancel</button>';
+                document.getElementById('confirmPartnerSave').addEventListener('click', event => {
+                    savePartnerStudent(student, saveButton, event.currentTarget);
+                });
+                document.getElementById('cancelPartnerSave').addEventListener('click', () => {
+                    document.getElementById('partnerStudentDetails').innerHTML = '';
+                });
+            }
+
+            function savePartnerStudent(student, saveButton, confirmButton) {
+                saveButton.disabled = true;
+                confirmButton.disabled = true;
                 document.getElementById('partnerStatus').innerText = 'Saving partner record...';
                 requestJson('/import-student', {
                     method: 'POST',
@@ -220,7 +240,8 @@
                     .catch(error => {
                         document.getElementById('partnerStatus').innerText =
                             error.message || 'Unable to save partner record.';
-                        button.disabled = false;
+                        saveButton.disabled = false;
+                        confirmButton.disabled = false;
                     });
             }
 
