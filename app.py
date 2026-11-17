@@ -36,6 +36,57 @@ def get_classmate_students():
     return jsonify(data)
 
 
+@app.route('/partner-records')
+def partner_records():
+    partner_url = "https://paclibarjosilp-2.onrender.com/api/students"
+    try:
+        response = requests.get(partner_url, timeout=15)
+        response.raise_for_status()
+    except requests.RequestException:
+        return jsonify({"error": "Unable to retrieve partner data"}), 502
+
+    try:
+        records = response.json()
+    except ValueError:
+        return jsonify({"error": "Partner API did not return valid JSON"}), 502
+
+    if not isinstance(records, list):
+        return jsonify({"error": "Partner API must return a JSON list"}), 502
+    return jsonify(records)
+
+
+@app.route('/import-student', methods=['POST'])
+def import_student():
+    data = request.get_json(silent=True)
+    return save_imported_student(data, 'Classmate API')
+
+
+@app.route('/import-partner-student', methods=['POST'])
+def import_partner_student():
+    data = request.get_json(silent=True)
+    return save_imported_student(data, 'Partner API')
+
+
+def save_imported_student(data, source):
+    required = ('student_id', 'name', 'program', 'year', 'section')
+    if not isinstance(data, dict) or any(
+        key not in data or data[key] in ('', None) for key in required
+    ):
+        return jsonify({"error": "All student fields are required"}), 400
+
+    conn = get_db_connection()
+    conn.execute(
+        """INSERT INTO students
+        (student_id, name, program, year, section, source)
+        VALUES (?, ?, ?, ?, ?, ?)""",
+        (data['student_id'], data['name'], data['program'],
+         data['year'], data['section'], source)
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({"message": "Remote record saved"}), 201
+
+
 @app.route('/api/students', methods=['GET'])
 def api_get_students():
     conn = get_db_connection()
@@ -50,13 +101,16 @@ def add_student():
     required = ('student_id', 'name', 'program', 'year', 'section')
     if any(key not in data or data[key] in ('', None) for key in required):
         return jsonify({"error": "All student fields are required"}), 400
+    source = data.get('source', 'External API')
+    if not isinstance(source, str) or not source.strip():
+        return jsonify({"error": "Source must be a non-empty string"}), 400
 
     conn = get_db_connection()
     cursor = conn.execute(
-        """INSERT INTO students (student_id, name, program, year, section)
-        VALUES (?, ?, ?, ?, ?)""",
+        """INSERT INTO students (student_id, name, program, year, section, source)
+        VALUES (?, ?, ?, ?, ?, ?)""",
         (data['student_id'], data['name'], data['program'],
-         data['year'], data['section'])
+         data['year'], data['section'], source)
     )
     conn.commit()
     new_id = cursor.lastrowid

@@ -29,20 +29,35 @@
                 gap: 10px;
             }
 
-            #studentTable {
+            .record-table {
                 width: 100%;
                 border-collapse: collapse;
             }
 
-            #studentTable th,
-            #studentTable td {
+            .record-table th,
+            .record-table td {
                 border: 1px solid #cccccc;
                 padding: 8px;
                 text-align: left;
             }
 
-            #studentTable tr[data-id] {
+            .record-table tr[data-id] {
                 cursor: pointer;
+            }
+
+            .dashboard-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+                gap: 16px;
+                align-items: start;
+            }
+
+            .dashboard-card {
+                min-width: 0;
+                padding: 12px;
+                border: 1px solid #cccccc;
+                border-radius: 6px;
+                overflow-x: auto;
             }
 
             #result {
@@ -83,12 +98,33 @@
         <button onclick="deleteStudent()">Delete</button>
         <button onclick="clearStudentForm()">Clear</button>
         <p id="crudStatus"></p>
-        <h3>My Records</h3>
-        <p><strong>Source:</strong> This application's local database</p>
+        <h2>Integration Dashboard</h2>
+        <p>Review local and imported records, retrieve partner records, and save selected records locally.</p>
         <button onclick="readStudents()">Load My Records</button>
-        <input type="search" id="localStudentSearch" placeholder="Search ID, name, program, year, or section">
-        <table id="studentTable"></table>
-        <div id="localStudentDetails"></div>
+        <input type="search" id="localStudentSearch" placeholder="Search ID, name, program, year, section, or source">
+        <div class="dashboard-grid">
+            <section class="dashboard-card">
+                <h3>My Local Records</h3>
+                <p><strong>Source:</strong> Local database</p>
+                <p id="localRecordCount">Loading...</p>
+                <table id="localStudentTable" class="record-table"></table>
+                <div id="localStudentDetails"></div>
+            </section>
+            <section class="dashboard-card">
+                <h3>Imported Records</h3>
+                <p><strong>Source:</strong> Shown per saved record</p>
+                <p id="importedRecordCount">Loading...</p>
+                <table id="importedStudentTable" class="record-table"></table>
+            </section>
+            <section class="dashboard-card">
+                <h3>Partner Records</h3>
+                <p><strong>Source:</strong> Partner API</p>
+                <button onclick="loadPartnerRecords()">Load Partner Records</button>
+                <div id="partnerStatus"></div>
+                <table id="partnerTable" class="record-table"></table>
+                <div id="partnerStudentDetails"></div>
+            </section>
+        </div>
 
         <hr>
         <h2>Classmate's Records</h2>
@@ -105,9 +141,82 @@
         <div id="classmateStudentDetails"></div>
 
         <script>
-            window.addEventListener('DOMContentLoaded', readStudents);
+            window.addEventListener('DOMContentLoaded', () => {
+                readStudents();
+                loadPartnerRecords();
+            });
             let localStudents = [];
             let classmateStudents = [];
+            let partnerStudents = [];
+
+            function loadPartnerRecords() {
+                const status = document.getElementById('partnerStatus');
+                const table = document.getElementById('partnerTable');
+                status.innerText = 'Loading partner records...';
+                table.innerHTML = '';
+
+                requestJson('/partner-records')
+                    .then(records => {
+                        if (!Array.isArray(records)) {
+                            throw new Error('Partner API must return a JSON list.');
+                        }
+                        partnerStudents = records;
+                        renderPartnerStudents(records);
+                        status.innerText = 'Loaded ' + records.length + ' partner record(s).';
+                    })
+                    .catch(error => {
+                        status.innerText = error.message || 'Unable to retrieve partner records.';
+                    });
+            }
+
+            function renderPartnerStudents(records) {
+                let rows = '<tr><th>Student ID</th><th>Name</th><th>Program</th><th>Year</th><th>Section</th><th>Source</th><th>Actions</th></tr>';
+                records.forEach((student, index) => {
+                    rows += '<tr>' +
+                        '<td>' + escapeHtml(student.student_id) + '</td>' +
+                        '<td>' + escapeHtml(student.name) + '</td>' +
+                        '<td>' + escapeHtml(student.program) + '</td>' +
+                        '<td>' + escapeHtml(student.year) + '</td>' +
+                        '<td>' + escapeHtml(student.section) + '</td>' +
+                        '<td>Partner API</td>' +
+                        '<td>' +
+                        '<button type="button" data-action="view" data-index="' + index + '">View</button>' +
+                        '<button type="button" data-action="save" data-index="' + index + '">Save to My Database</button>' +
+                        '</td>' +
+                        '</tr>';
+                });
+                document.getElementById('partnerTable').innerHTML = rows;
+                document.querySelectorAll('#partnerTable [data-action]').forEach(button => {
+                    button.addEventListener('click', () => {
+                        const student = partnerStudents[Number(button.dataset.index)];
+                        if (button.dataset.action === 'view') {
+                            renderStudentDetails('partnerStudentDetails', student, 'Partner');
+                        } else {
+                            savePartnerStudent(student, button);
+                        }
+                    });
+                });
+            }
+
+            function savePartnerStudent(student, button) {
+                button.disabled = true;
+                document.getElementById('partnerStatus').innerText = 'Saving partner record...';
+                requestJson('/import-student', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(student)
+                })
+                    .then(result => {
+                        button.innerText = 'Saved locally';
+                        document.getElementById('partnerStatus').innerText = result.message;
+                        readStudents();
+                    })
+                    .catch(error => {
+                        document.getElementById('partnerStatus').innerText =
+                            error.message || 'Unable to save partner record.';
+                        button.disabled = false;
+                    });
+            }
 
             function loadClassmateStudents() {
                 const apiUrl = document.getElementById('classmateApiUrl').value.trim();
@@ -174,7 +283,9 @@
                     '<p><strong>Name:</strong> ' + escapeHtml(student.name) + '</p>' +
                     '<p><strong>Program:</strong> ' + escapeHtml(student.program) + '</p>' +
                     '<p><strong>Year:</strong> ' + escapeHtml(student.year) + '</p>' +
-                    '<p><strong>Section:</strong> ' + escapeHtml(student.section) + '</p>';
+                    '<p><strong>Section:</strong> ' + escapeHtml(student.section) + '</p>' +
+                    '<p><strong>Source:</strong> ' +
+                    escapeHtml(student.source || source) + '</p>';
             }
 
             function showClassmateDetails(student) {
@@ -235,33 +346,45 @@
             }
 
             function renderLocalStudents(students) {
-                let rows = '<tr><th>ID</th><th>Student ID</th><th>Name</th><th>Program</th><th>Year</th><th>Section</th><th>Actions</th></tr>';
+                const localRecords = students.filter(student => student.source === 'Local');
+                const importedRecords = students.filter(student => student.source !== 'Local');
+                document.getElementById('localRecordCount').innerText =
+                    localRecords.length + ' record(s)';
+                document.getElementById('importedRecordCount').innerText =
+                    importedRecords.length + ' record(s)';
+                renderSavedStudentTable('localStudentTable', localRecords);
+                renderSavedStudentTable('importedStudentTable', importedRecords);
+            }
+
+            function renderSavedStudentTable(tableId, students) {
+                let rows = '<tr><th>ID</th><th>Student ID</th><th>Name</th><th>Program</th><th>Year</th><th>Section</th><th>Source</th><th>Actions</th></tr>';
                 students.forEach(student => {
                     rows += '<tr data-id="' + student.id + '" style="cursor:pointer">' +
-                                '<td>' + student.id + '</td>' +
-                                '<td>' + student.student_id + '</td>' +
-                                '<td>' + student.name + '</td>' +
-                                '<td>' + student.program + '</td>' +
-                                '<td>' + student.year + '</td>' +
-                                '<td>' + student.section + '</td>' +
+                                '<td>' + escapeHtml(student.id) + '</td>' +
+                                '<td>' + escapeHtml(student.student_id) + '</td>' +
+                                '<td>' + escapeHtml(student.name) + '</td>' +
+                                '<td>' + escapeHtml(student.program) + '</td>' +
+                                '<td>' + escapeHtml(student.year) + '</td>' +
+                                '<td>' + escapeHtml(student.section) + '</td>' +
+                                '<td>' + escapeHtml(student.source) + '</td>' +
                                 '<td>' +
-                                '<button type="button" data-action="edit" data-id="' + student.id + '">Edit</button>' +
-                                '<button type="button" data-action="delete" data-id="' + student.id + '">Delete</button>' +
+                                '<button type="button" data-action="edit" data-id="' + escapeHtml(student.id) + '">Edit</button>' +
+                                '<button type="button" data-action="delete" data-id="' + escapeHtml(student.id) + '">Delete</button>' +
                                 '</td>' +
                                 '</tr>';
                 });
-                document.getElementById('studentTable').innerHTML = rows;
-                document.querySelectorAll('#studentTable tr[data-id]').forEach(row => {
+                document.getElementById(tableId).innerHTML = rows;
+                document.querySelectorAll('#' + tableId + ' tr[data-id]').forEach(row => {
                     row.addEventListener('click', event => {
                         if (event.target.closest('[data-action]')) return;
                         const id = Number(row.dataset.id);
                         requestJson('/api/students/' + id).then(student => {
                             fillStudentForm(student);
-                            renderStudentDetails('localStudentDetails', student, 'Local');
-                            });
+                            renderStudentDetails('localStudentDetails', student, student.source);
                         });
+                    });
                 });
-                document.querySelectorAll('#studentTable [data-action]').forEach(button => {
+                document.querySelectorAll('#' + tableId + ' [data-action]').forEach(button => {
                     button.addEventListener('click', event => {
                         event.stopPropagation();
                         const id = Number(button.dataset.id);
@@ -269,7 +392,7 @@
                             requestJson('/api/students/' + id).then(student => {
                                 fillStudentForm(student);
                                 document.getElementById('studentName').focus();
-                                renderStudentDetails('localStudentDetails', student, 'Local');
+                                renderStudentDetails('localStudentDetails', student, student.source);
                                 setCrudStatus('Record loaded. Make changes, then click Edit.');
                             });
                         } else {
@@ -304,7 +427,7 @@
                 const query = event.target.value.toLowerCase();
                 const filtered = localStudents.filter(student =>
                     [student.id, student.student_id, student.name, student.program,
-                        student.year, student.section].some(value =>
+                        student.year, student.section, student.source].some(value =>
                         String(value).toLowerCase().includes(query))
                 );
                 renderLocalStudents(filtered);
@@ -313,6 +436,7 @@
             function createStudent() {
                 const data = getStudentData();
                 if (!validateStudentData(data)) return;
+                data.source = 'Local';
                 requestJson('/api/students', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
