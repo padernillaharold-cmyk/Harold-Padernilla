@@ -7,9 +7,9 @@
         <style>
             body {
                 font-family: Arial, sans-serif;
-                max-width: 700px;
-                margin: 40px auto;
-                padding: 20px;
+                max-width: 1400px;
+                margin: 24px auto;
+                padding: 24px;
                 color: #222;
             }
 
@@ -31,14 +31,20 @@
 
             .record-table {
                 width: 100%;
+                min-width: 900px;
                 border-collapse: collapse;
             }
 
             .record-table th,
             .record-table td {
                 border: 1px solid #cccccc;
-                padding: 8px;
+                padding: 10px 12px;
                 text-align: left;
+                vertical-align: middle;
+            }
+
+            .record-table th {
+                background: #f3f4f6;
             }
 
             .record-table tr[data-id] {
@@ -47,14 +53,14 @@
 
             .dashboard-grid {
                 display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-                gap: 16px;
+                grid-template-columns: minmax(0, 1fr);
+                gap: 20px;
                 align-items: start;
             }
 
             .dashboard-card {
                 min-width: 0;
-                padding: 12px;
+                padding: 18px;
                 border: 1px solid #cccccc;
                 border-radius: 6px;
                 overflow-x: auto;
